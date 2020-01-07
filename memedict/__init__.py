@@ -22,24 +22,35 @@ def search_meme(text):
     soup = BeautifulSoup(r.text, 'html.parser')
     memes_list = soup.find(class_='entry_list')
     if memes_list:
-        meme_paths = [meme['href'] for meme in memes_list.find_all('a', href=True)]
-        meme_names = [meme_path.replace('-', ' ') for meme_path in meme_paths]
+        # Get all unique returned meme paths
+        meme_paths = [meme['href'] for meme in memes_list.find_all('a', class_='photo', href=True)]
+        meme_paths = list(set(meme_paths))
+        # Get the meme template names and URLs from the meme paths
+        meme_names = [meme_path.split('/')[-1].replace('-', ' ') for meme_path in meme_paths]
         meme_urls = ['https://knowyourmeme.com%s' % meme_path for meme_path in meme_paths]
-        return zip(meme_names, meme_urls)
-    return [(None, None)]
+        return list(zip(meme_names, meme_urls))
+    return None
 
 
 def search(text):
     """Return a meme definition from a meme keywords.
     """
-    meme_names_and_urls = search_meme(text)
-    sequence_match_ratios = [SequenceMatcher(None, text, meme_name_and_url[0]).ratio()
-                             for meme_name_and_url in meme_names_and_urls]
-    best_match = meme_names_and_urls[sequence_matches.index(max(sequence_matches))]
-    meme_name, url = best_match[0], best_match[1]
+    memes = search_meme(text)
+    if memes is None:
+        return None
 
-    if meme_name and SequenceMatcher(None, text, meme_name).ratio() >= SEARCH_SIMILARITY_THRESHOLD:
+    # Get sequence match scores between each meme template name search text
+    meme_scores = [SequenceMatcher(None, text, meme[0]).ratio() for meme in memes]
+
+    # Get the best matching meme and its name and URL
+    best_meme_score = max(meme_scores)
+    best_meme = memes[meme_scores.index(best_meme_score)]
+    meme_name, url = best_meme[0], best_meme[1]
+
+    if meme_name and best_meme_score >= SEARCH_SIMILARITY_THRESHOLD:
         r = requests.get(url, headers=HEADERS)
         soup = BeautifulSoup(r.text, 'html.parser')
         entry = soup.find('h2', {'id': 'about'})
-        return '%s. %s' % (meme_name.split('/')[-1].title(), entry.next.next.next.text)
+        return entry.next.next.next.text
+
+    return None
